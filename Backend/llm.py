@@ -20,11 +20,13 @@ The database schema is:
   Columns: profile_id, depth, temperature, salinity
 
 Rules:
+- always give the coordinate if salinity or temperature is asked
 - Use JOIN only if necessary: join profiles.platform = measurements.profile_id
 - Do NOT use any column that does not exist
 - Always return valid SQLite syntax
-- if a city name is given then take that city's coordinates and the search near 1000km radius of that city (using sqlite)
+- if a city name is given then take that city's shore coordinates and the search near 1000km radius of that city (using sqlite)
 - Return ONLY the SQL query, no explanation
+- Dont add the duplicate entries
 
 Question: {question}
 """
