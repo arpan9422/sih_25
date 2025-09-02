@@ -87,7 +87,7 @@ def summarize_data(data):
     try:
         model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(prompt)
-        return response.text  # ✅ extract text
+        return {"text" : response.text}  # ✅ extract text
     except Exception as e:
         return {"error": str(e)}
 
