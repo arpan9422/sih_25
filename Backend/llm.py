@@ -1,57 +1,78 @@
-# llm_service.py
+# llm.py
 import google.generativeai as genai
-from sqlalchemy.orm import Session
 from sqlalchemy import text
+import re
+import logging
 
-# Initialize Gemini
-genai.configure(api_key="AIzaSyDBgCUh5nMajD5dR-CuijJqTS4C69p8XwY")
-model = genai.GenerativeModel("gemini-1.5-flash")  # or gemini-1.5-pro
+# Configure Gemini
+genai.configure(api_key="AIzaSyDBgCUh5nMajD5dR-CuijJqTS4C69p8XwY")  # <-- replace with your actual key
 
+# Setup logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def clean_sql(sql: str) -> str:
-    """Remove Markdown code block if present"""
-    if sql.startswith("```"):
-        sql = "\n".join(sql.split("\n")[1:-1])
-    return sql.strip()
-
-def query_ocean_data(natural_query: str, db: Session):
-    """
-    Translate natural language queries into SQL using Gemini and execute on DB.
-    """
-    # Prompt to instruct Gemini
-    system_prompt = """You are an assistant that converts natural language queries into valid SQLite queries for oceanographic data.
-
-Database schema:
-- profiles(id, profile_id, lat, lon, time_utc)
-- measurements(id, profile_id, depth, temperature, salinity)
+# Prompt template for Gemini
+SQL_PROMPT = """
+You are an expert data assistant. Convert the following natural language question into a valid SQLite SQL query.
+The database schema is:
+- Table: profiles
+  Columns: platform, latitude, longitude, date
+- Table: measurements
+  Columns: profile_id, depth, temperature, salinity
 
 Rules:
-1. If joining measurements and profiles, always join measurements.profile_id = profiles.id
-2. Use only columns listed above.
-3. Always produce valid SQLite SQL.
-4. Include LIMIT 5 for exploratory queries.
+- Use JOIN only if necessary: join profiles.platform = measurements.profile_id
+- Do NOT use any column that does not exist
+- Always return valid SQLite syntax
 
-Example:
-- '5 measurements at depth 1000' ->
-  SELECT m.temperature, m.salinity, m.depth
-  FROM measurements m
-  LIMIT 5;
+- Return ONLY the SQL query, no explanation
 
-Convert this query into SQL:
-
+Question: {question}
 """
 
+def clean_sql(sql: str) -> str:
+    """Remove unwanted characters or markdown formatting and ensure SQL starts with SELECT."""
+    sql = sql.strip()
+    # Remove markdown backticks
+    sql = re.sub(r"^```sql|```$", "", sql, flags=re.MULTILINE).strip()
+    # Remove any text before the first SELECT/UPDATE/INSERT/DELETE
+    match = re.search(r"(SELECT|INSERT|UPDATE|DELETE).*", sql, flags=re.IGNORECASE | re.DOTALL)
+    if match:
+        sql = match.group(0)
+    return sql
 
-    full_prompt = f"{system_prompt}\n{natural_query}"
+
+def generate_sql(question: str) -> str:
+    """Generate SQL query from natural language using Gemini."""
+    prompt = SQL_PROMPT.format(question=question)
+    response = genai.GenerativeModel("gemini-1.5-flash").generate_content(prompt)
+    sql = clean_sql(response.text)
+    logging.info(f"Generated SQL: {sql}")
+    return sql
+
+def execute_sql(sql: str, db):
+    """Execute SQL query and return results."""
+    try:
+        result = db.execute(text(sql)).fetchall()
+        return [dict(row._mapping) for row in result]
+    except Exception as e:
+        logging.error(f"SQL execution failed: {e}")
+        return {"error": str(e)}
+
+def query_ocean_data(question: str, db):
+    """Main pipeline: NL → SQL → Execution → Result"""
+    if not question or not question.strip():
+        return {"error": "Empty query", "sql_query": None}
 
     try:
-        response = model.generate_content(full_prompt)
-        sql_response = clean_sql(response.text.strip())
-
-    # Execute the SQL
-        result = db.execute(text(sql_response)).fetchall()
-        rows = [dict(r._mapping) for r in result]
-
-        return {"query": natural_query, "sql": sql_response, "result": rows}
+        sql = generate_sql(question)
+        results = execute_sql(sql, db)
+        return {
+            "question": question,
+            "sql_query": sql,
+            "results": results
+        }
     except Exception as e:
-        return {"error": str(e), "sql": sql_response if 'sql_response' in locals() else None}
+        return {
+            "question": question,
+            "error": str(e)
+        }

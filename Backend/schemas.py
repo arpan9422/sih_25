@@ -8,7 +8,7 @@ class MeasurementBase(BaseModel):
     salinity: Optional[float]
 
 class MeasurementOut(MeasurementBase):
-    id: int
+    id: Optional[int] = None  # make optional since DB has no id
     class Config:
         orm_mode = True
 
@@ -19,7 +19,7 @@ class ProfileBase(BaseModel):
     platform: str
 
 class ProfileOut(ProfileBase):
-    id: int
+    id: Optional[int] = None  # make optional
     measurements: List[MeasurementOut] = []
     class Config:
         orm_mode = True
