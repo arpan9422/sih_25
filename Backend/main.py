@@ -4,7 +4,7 @@ from database import Base, engine
 import models
 from routes import profiles, measurements
 from fastapi.middleware.cors import CORSMiddleware
-from llm import query_ocean_data  # <-- fix import
+from llm import query_ocean_data, summarize_data  # <-- fix import
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from database import get_db  # <-- your session dependency
@@ -40,5 +40,15 @@ def run_query(request: QueryRequest, db: Session = Depends(get_db)):
     try:
         result = query_ocean_data(request.query, db)  # pass db session
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/summarize-query", tags=["LLM"])
+def summarizer_result(request: QueryRequest, db: Session = Depends(get_db)):
+    try:
+        answer = query_ocean_data(request.query, db)
+        result = summarize_data(answer)
+        return result
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

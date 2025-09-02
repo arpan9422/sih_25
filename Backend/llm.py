@@ -23,7 +23,7 @@ Rules:
 - Use JOIN only if necessary: join profiles.platform = measurements.profile_id
 - Do NOT use any column that does not exist
 - Always return valid SQLite syntax
-
+- if a city name is given then take that city's coordinates and the search near 1000km radius of that city (using sqlite)
 - Return ONLY the SQL query, no explanation
 
 Question: {question}
@@ -58,7 +58,7 @@ def execute_sql(sql: str, db):
         logging.error(f"SQL execution failed: {e}")
         return {"error": str(e)}
 
-def query_ocean_data(question: str, db):
+def     query_ocean_data(question: str, db):
     """Main pipeline: NL → SQL → Execution → Result"""
     if not question or not question.strip():
         return {"error": "Empty query", "sql_query": None}
@@ -76,3 +76,19 @@ def query_ocean_data(question: str, db):
             "question": question,
             "error": str(e)
         }
+
+
+def summarize_data(data):
+    prompt = f"""
+    You are an ocean expert. The following is a user query and the result from the ARGO database.
+    Give a clear, concise conclusion to the user.
+    {data}
+    """
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        return response.text  # ✅ extract text
+    except Exception as e:
+        return {"error": str(e)}
+
+        
